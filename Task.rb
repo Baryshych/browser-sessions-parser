@@ -43,12 +43,12 @@ def collect_stats_from_users(report, users_objects, &block)
   end
 end
 
-def lazy(path = 'data_large.txt', save_every = 1000)
+def lazy(path = 'data.txt', save_every = 100)
   line = 0
   user_stats = []
   user_count = 0
 
-  file = File.open('data_large.txt', "r")
+  file = File.open(path, "r")
 
   next_user = nil
   report = init_report
@@ -64,10 +64,11 @@ def lazy(path = 'data_large.txt', save_every = 1000)
     user_stats = get_user_stats(user_object)
     p user_stats
     report = generate_report(user_stats, report)
+    # тут будет системное поле - all_brosers
     save_report(report, line) if user_count % save_every
   end
-
-
+  # report.delete(:all_browsers)
+  save_report(report, line)
 end
 
 def get_user_from_file(file, line, next_user)
@@ -116,15 +117,11 @@ def get_user_stats(user)
 end
 
 def generate_report(user_stats, report)
-  report[:all_browsers] = report[:all_browsers] + user_stats[:browsers].flatten
-  unique_browsers = report[:all_browsers].uniq.sort
+  unique_browsers = (report[:allBrowsers].split(',') + user_stats[:browsers].flatten).uniq.sort
   report[:totalUsers] += 1
   report[:totalSessions] = user_stats[:sessionsCount] + report[:totalSessions]
-  report[:allBrowsers] = unique_browsers.join(', ')
+  report[:allBrowsers] = unique_browsers.join(',')
   report[:uniqueBrowsersCount] = unique_browsers.count
-  # report[:uniqueBrowsers] = unique_browsers.join(', ')
-  report[:usedIE] = report[:usedIE] || user_stats[:usedIE]
-  report[:alwaysUsedChrome] = report[:alwaysUsedChrome] && user_stats[:alwaysUsedChrome]
   report[:usersStats] = report[:usersStats].merge(format_user_stats(user_stats))
   report
 end
@@ -143,16 +140,12 @@ def init_report
       totalUsers: 0,
       uniqueBrowsersCount: 0,
       totalSessions: 0,
-      usedIE: false,
-      alwaysUsedChrome: true,
-      uniqueBrowsers: [],
-      all_browsers: [],
+      allBrowsers: '',
       usersStats: {},
   }
 end
 
 def save_report(report, line)
-  report.delete(:all_browsers)
   File.write('result.json', "#{report.to_json}\n")
   File.write('system', "#{line}\n")
 end
@@ -189,6 +182,7 @@ session,2,3,Chrome 20,84,2016-11-25
     expected_result = JSON.parse(expected_result_string)
     actual_result = JSON.parse(File.read('result.json'))
 
+    # assert_equal expected_result, actual_result
     assert_equal expected_result, actual_result
   end
 end
