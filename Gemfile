@@ -1,3 +1,3 @@
 gem 'json'
-gem 'pry'
 gem 'date'
+gem 'minitest'
