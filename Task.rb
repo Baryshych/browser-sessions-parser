@@ -43,6 +43,9 @@ def collect_stats_from_users(report, users_objects, &block)
   end
 end
 
+# как оно работает сейчас - с файла построчно (не закидая все водержимое в память) считываются данные юзера
+# каждые save_every юзеров промежуточный репорт записывается в файл
+# чтобы можно было продолжить считывание с места, если прервется выполнение (не имплементировано пока)
 def lazy(path = 'data.txt', save_every = 100)
   line = 0
   user_stats = []
@@ -53,6 +56,7 @@ def lazy(path = 'data.txt', save_every = 100)
   next_user = nil
   report = init_report
 
+  # line - текущая линия файла. Если EOF, то метод считывания вернет -1
   while line != -1
     data = get_user_from_file(file, line, next_user)
     line = data[:ending_line]
@@ -64,13 +68,16 @@ def lazy(path = 'data.txt', save_every = 100)
     user_stats = get_user_stats(user_object)
     p user_stats
     report = generate_report(user_stats, report)
-    # тут будет системное поле - all_brosers
+    # сохранение промежуточных результатов
     save_report(report, line) if user_count % save_every
   end
-  # report.delete(:all_browsers)
   save_report(report, line)
 end
 
+# получаем данные о сессиях пользователя из файла
+# считываем строки от user,... до user,...
+# next user потому что мы указатель на строку файла не может быть возвращен назад,
+# и окончание блока пользователя мы можем определить только началом следующего
 def get_user_from_file(file, line, next_user)
   sessions = []
   user = []
@@ -91,6 +98,7 @@ def get_user_from_file(file, line, next_user)
   rescue EOFError
     p 'end of the file reached'
     ending_line = -1
+  # в случае ЕОФ мы возвращаем то, что успели вытянуть
   ensure
     data = {
         ending_line: ending_line,
@@ -116,6 +124,7 @@ def get_user_stats(user)
   initial_stats
 end
 
+# этот метод сливает воедино данные пользователя и текущий репорт
 def generate_report(user_stats, report)
   unique_browsers = (report[:allBrowsers].split(',') + user_stats[:browsers].flatten).uniq.sort
   report[:totalUsers] += 1
@@ -126,6 +135,7 @@ def generate_report(user_stats, report)
   report
 end
 
+# обработка хэша данных пользователя для записи в джисон
 def format_user_stats(user_stats)
   formatted_stats = {}
   name = user_stats.delete(:user)
@@ -135,6 +145,7 @@ def format_user_stats(user_stats)
   formatted_stats
 end
 
+# создаем "пустой" репорт с дефолтными значениями в полях
 def init_report
   {
       totalUsers: 0,
@@ -145,6 +156,8 @@ def init_report
   }
 end
 
+# system создается для того, чтобы при обрыве парсинга можно было получить номер строки,
+# на которой закончился последний успешный блок
 def save_report(report, line)
   File.write('result.json', "#{report.to_json}\n")
   File.write('system', "#{line}\n")
@@ -152,7 +165,7 @@ end
 
 class TestMe < Minitest::Test
   def setup
-    # File.write('result.json', '')
+    File.write('result.json', '')
     File.write('data.txt',
                'user,0,Leida,Cira,0
 session,0,0,Safari 29,87,2016-10-23
@@ -177,12 +190,10 @@ session,2,3,Chrome 20,84,2016-11-25
 
   def test_result
     lazy
-    # work
     expected_result_string = '{"totalUsers":3,"uniqueBrowsersCount":14,"totalSessions":15,"allBrowsers":"CHROME 13,CHROME 20,CHROME 35,CHROME 6,FIREFOX 12,FIREFOX 32,FIREFOX 47,INTERNET EXPLORER 10,INTERNET EXPLORER 28,INTERNET EXPLORER 35,SAFARI 17,SAFARI 29,SAFARI 39,SAFARI 49","usersStats":{"Leida Cira":{"sessionsCount":6,"totalTime":"455 min.","longestSession":"118 min.","browsers":"FIREFOX 12, INTERNET EXPLORER 28, INTERNET EXPLORER 28, INTERNET EXPLORER 35, SAFARI 29, SAFARI 39","usedIE":true,"alwaysUsedChrome":false,"dates":["2017-09-27","2017-03-28","2017-02-27","2016-10-23","2016-09-15","2016-09-01"]},"Palmer Katrina":{"sessionsCount":5,"totalTime":"218 min.","longestSession":"116 min.","browsers":"CHROME 13, CHROME 6, FIREFOX 32, INTERNET EXPLORER 10, SAFARI 17","usedIE":true,"alwaysUsedChrome":false,"dates":["2017-04-29","2016-12-28","2016-12-20","2016-11-11","2016-10-21"]},"Gregory Santos":{"sessionsCount":4,"totalTime":"192 min.","longestSession":"85 min.","browsers":"CHROME 20, CHROME 35, FIREFOX 47, SAFARI 49","usedIE":false,"alwaysUsedChrome":false,"dates":["2018-09-21","2018-02-02","2017-05-22","2016-11-25"]}}}' + "\n"
     expected_result = JSON.parse(expected_result_string)
     actual_result = JSON.parse(File.read('result.json'))
 
-    # assert_equal expected_result, actual_result
     assert_equal expected_result, actual_result
   end
 end
